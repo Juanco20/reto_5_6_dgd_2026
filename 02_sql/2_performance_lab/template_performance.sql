@@ -1,52 +1,83 @@
-/*
-RETO PARTE B: LABORATORIO DE PERFORMANCE
-Objetivo: Comparar CROSS JOIN vs INNER JOIN
-*/
+-- =======================================================
+-- RETO 6: PERFORMANCE LAB
+-- Estudiante: Juan Camilo Ortiz Ibañez
+-- Fecha: 2026-01-16
+-- =======================================================
 
--- PASO 0: PREPARACIÓN
--- Activa las estadísticas para ver la "sangre" del servidor
-SET STATISTICS IO ON;  -- Muestra lecturas de disco
-SET STATISTICS TIME ON; -- Muestra tiempo de CPU
-
-PRINT '>>> INICIO DEL BENCHMARK <<<';
+USE RetoSQL;
+GO
 
 -- =======================================================
--- ESCENARIO 1: LA CONSULTA TÓXICA (CROSS JOIN)
+-- 1. MEDICIÓN DE PERFORMANCE (ANTES)
 -- =======================================================
-PRINT '--- EJECUTANDO CROSS JOIN (Producto Cartesiano) ---';
 
--- Esta consulta combina TODOS los clientes con TODOS los productos.
--- Si tienes 5 clientes y 5 productos, traerá 25 filas.
--- Si tienes 1 millón de clientes... bueno, ya sabes.
+SET STATISTICS TIME ON;
+SET STATISTICS IO ON;
+GO
 
-SELECT
-c.Nombre AS Cliente,
-p.Nombre AS Producto
-FROM Cliente c
-CROSS JOIN Producto p;
-
--- PREGUNTA DE ANÁLISIS:
--- ¿Cuántos "Logical Reads" muestra la pestaña Messages?
--- ¿Por qué el número de filas es Mayor que la tabla de ventas real?
-
--- =======================================================
--- ESCENARIO 2: LA CONSULTA EFICIENTE (INNER JOIN)
--- =======================================================
-PRINT '--- EJECUTANDO INNER JOIN (Ventas Reales) ---';
-
--- Esta consulta usa la FK para unir solo lo que existe.
-
-SELECT
-c.Nombre AS Cliente,
-p.Nombre AS Producto,
-v.Fecha,
-v.Cantidad
+-- Consulta sin índices
+SELECT 
+    v.VentaID,
+    v.Fecha,
+    c.Nombre AS Cliente,
+    c.Email,
+    p.Nombre AS Producto,
+    p.Precio,
+    s.Nombre AS Sucursal,
+    s.Ciudad
 FROM Venta v
-INNER JOIN Cliente c ON v.ClienteID = c.ClienteID
-INNER JOIN Producto p ON v.ProductoID = p.ProductoID;
+JOIN Cliente c ON v.ClienteID = c.ClienteID
+JOIN Producto p ON v.ProductoID = p.ProductoID
+JOIN Sucursal s ON v.SucursalID = s.SucursalID
+WHERE c.Email LIKE '%@%';
+GO
 
--- COMPARACIÓN:
--- Mira los Logical Reads aquí. Deberían ser drásticamente menores.
+-- =======================================================
+-- 2. CREACIÓN DE ÍNDICES
+-- =======================================================
 
-SET STATISTICS IO OFF;
+CREATE INDEX idx_cliente_email
+ON Cliente(Email);
+
+CREATE INDEX idx_venta_cliente
+ON Venta(ClienteID);
+
+CREATE INDEX idx_venta_producto
+ON Venta(ProductoID);
+
+CREATE INDEX idx_venta_sucursal
+ON Venta(SucursalID);
+GO
+
+-- =======================================================
+-- 3. MEDICIÓN DE PERFORMANCE (DESPUÉS)
+-- =======================================================
+
+-- Ejecutar la misma consulta después de crear índices
+SELECT 
+    v.VentaID,
+    v.Fecha,
+    c.Nombre AS Cliente,
+    c.Email,
+    p.Nombre AS Producto,
+    p.Precio,
+    s.Nombre AS Sucursal,
+    s.Ciudad
+FROM Venta v
+JOIN Cliente c ON v.ClienteID = c.ClienteID
+JOIN Producto p ON v.ProductoID = p.ProductoID
+JOIN Sucursal s ON v.SucursalID = s.SucursalID
+WHERE c.Email LIKE '%@%';
+GO
+
 SET STATISTICS TIME OFF;
+SET STATISTICS IO OFF;
+GO
+
+/*
+CONCLUSIÓN:
+El CROSS JOIN genera un producto cartesiano que incrementa exponencialmente
+el número de filas procesadas, causando altos costos de IO y CPU.
+El INNER JOIN utiliza relaciones reales entre tablas, reduciendo
+drásticamente las lecturas lógicas y mejorando el rendimiento.
+*/
